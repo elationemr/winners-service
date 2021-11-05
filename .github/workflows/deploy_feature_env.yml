@@ -1,0 +1,71 @@
+name: Deploy Feature Environment
+
+on:
+  workflow_dispatch:
+    branches: ['feature/**']
+  push:
+    branches: ['feature/**']
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Extract normalized branch
+        shell: bash
+        run: |
+          raw=${GITHUB_REF#refs/heads/}
+          no_slash=${raw//\//-}
+          clean=${no_slash//_/-}
+          echo "::set-output name=branch::$clean"
+        id: extract_branch
+
+      - uses: CumulusDS/get-yaml-paths-action@v0.1.0
+        id: config
+        with:
+          file: config.yaml
+          region: deployments.feature_branches.region
+          cluster: deployments.feature_branches.cluster
+          service_key: service_key
+
+      - uses: elationemr/github-actions/deployment/build-and-push-to-ecr@main
+        id: build-and-push-image
+        with:
+          ecr-repository: ${{ steps.config.outputs.service_key }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ steps.config.outputs.region }}
+
+      - name: Configure CI credentials
+        id: configure_init_creds
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ steps.config.outputs.region }}
+      
+      - name: Configure Kubectl
+        id: configure_kubectl
+        run: |
+          aws eks --region ${{ steps.config.outputs.region }} update-kubeconfig --name ${{ steps.config.outputs.cluster }}
+
+      - name: Setup Namespace
+        id: setup_namespace
+        run: |
+          namespace=${{ steps.config.outputs.service_key }}-${{ steps.extract_branch.outputs.branch }}
+          kubectl create namespace $namespace --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespaces $namespace istio-injection=enabled --overwrite=true
+          echo "::set-output name=namespace::$namespace"
+
+      - name: Helm Install
+        id: helm_install
+        working-directory: chart
+        run: |
+          helm upgrade ${{ steps.extract_branch.outputs.branch }} . \
+            -n ${{ steps.setup_namespace.outputs.namespace }} \
+            --set image.tag=${{ steps.build-and-push-image.outputs.image_tag }} \
+            --set namespace=${{ steps.setup_namespace.outputs.namespace }} \
+            --set deploymentLabel=${{ steps.extract_branch.outputs.branch }} \
+            --install

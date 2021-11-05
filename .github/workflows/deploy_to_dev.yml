@@ -1,0 +1,41 @@
+name: Deploy to Development
+
+on:
+  workflow_dispatch:
+    branches: ['main']
+  push:
+    branches: ['main']
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    env:
+      region: us-west-2
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: CumulusDS/get-yaml-paths-action@v0.1.0
+        id: config
+        with:
+          file: config.yaml
+          service_key: service_key
+
+      - uses: elationemr/github-actions/deployment/build-and-push-to-ecr@main
+        id: build-and-push-image
+        with:
+          ecr-repository: ${{ steps.config.outputs.service_key }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.region }}
+
+      - name: Update Image Version in the related HelmChart values.yaml
+        uses: fjogeleit/yaml-update-action@master
+        with:
+          valueFile: 'chart/values.yaml'
+          propertyPath: 'image.tag'
+          value: ${{ steps.build-and-push-image.outputs.image_tag }}
+          branch: main
+          targetBranch: main
+          createPR: false
+          message: 'Update Image Version to ${{ steps.build-and-push-image.outputs.image_tag }}' 

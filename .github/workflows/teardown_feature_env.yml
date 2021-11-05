@@ -1,0 +1,48 @@
+name: Teardown Feature Environment
+
+on:
+  workflow_dispatch:
+    branches: ['feature/**']
+  pull_request:
+    types: [closed]
+
+jobs:
+  teardown:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    name: Teardown Feature Environment
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: CumulusDS/get-yaml-paths-action@v0.1.0
+        id: config
+        with:
+          file: config.yaml
+          region: deployments.feature_branches.region
+          cluster: deployments.feature_branches.cluster
+          service_key: service_key
+
+      - name: Get namespace
+        shell: bash
+        run: |
+          raw="${{ github.head_ref }}"
+          no_slash=${raw//\//-}
+          clean=${no_slash//_/-}
+          namespace=${{ steps.config.outputs.service_key }}-$clean
+          echo "::set-output name=namespace::$namespace"
+        id: get_namespace
+
+      - name: Configure CI credentials
+        id: configure_init_creds
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ steps.config.outputs.region }}
+      
+      - name: Delete Namespace
+        id: delete_namespace
+        run: |
+          aws eks --region ${{ steps.config.outputs.region }} update-kubeconfig --name ${{ steps.config.outputs.cluster }}
+          kubectl delete namespace ${{ steps.get_namespace.outputs.namespace }}
+          echo "::set-output name=kubeconfig::$(cat ~/.kube/config)"

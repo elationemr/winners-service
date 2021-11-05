@@ -1,0 +1,17 @@
+{{- if .Values.dynamodb.enabled -}}
+apiVersion: dynamodb.services.k8s.aws/v1alpha1
+kind: Table
+metadata:
+  name: {{ .Release.Namespace }}-{{ .Release.Name }}-table
+spec:
+  tableName: {{ .Release.Namespace }}-{{ .Release.Name }}-table
+  keySchema:
+  - attributeName: pk
+    keyType: HASH
+  attributeDefinitions:
+  - attributeName: pk
+    attributeType: S
+  provisionedThroughput:
+    readCapacityUnits: 1
+    writeCapacityUnits: 1
+{{- end }}

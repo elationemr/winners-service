@@ -1,0 +1,8 @@
+{{- if .Values.s3.enabled -}}
+apiVersion: s3.services.k8s.aws/v1alpha1
+kind: Bucket
+metadata:
+  name: {{ .Release.Namespace }}-{{ .Release.Name }}-bucket
+spec:
+  name: {{ .Release.Namespace }}-{{ .Release.Name }}-bucket
+{{- end }}
