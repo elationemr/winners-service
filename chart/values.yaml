@@ -2,7 +2,7 @@ replicaCount: 1
 image:
   repository: 303970654249.dkr.ecr.us-west-2.amazonaws.com/winners-service
   pullPolicy: Always
-  tag: 42763f19bd540609868b6674bd993c65057e33d5
+  tag: 11607ae53dd5bbd7a6df1b158a2e3303c5c069c1
 serviceName: winners-service
 namespace: winners-service
 deploymentLabel: dev
